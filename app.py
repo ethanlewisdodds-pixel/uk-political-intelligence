@@ -1043,16 +1043,38 @@ def fetch_bills():
 @st.cache_data(ttl=3600)
 def fetch_consultations():
     try:
-        r = requests.get(
+        url = (
             "https://www.gov.uk/api/search.json"
             "?filter_content_store_document_type=open_consultation"
-            "&count=100&fields=title,link,description,public_timestamp,closing_date,organisations",
-            timeout=10)
-        if r.status_code == 200:
-            return r.json().get("results", [])
-    except Exception:
-        pass
-    return []
+            "&count=100"
+            "&fields=title,link,description,public_timestamp,closing_date,organisations"
+        )
+
+        r = requests.get(url, timeout=10)
+
+        if r.status_code != 200:
+            return []
+
+        data = r.json()
+        results = data.get("results", [])
+
+        consultations = []
+
+        for item in results:
+            consultations.append({
+                "title": item.get("title", ""),
+                "link": item.get("link", ""),
+                "description": item.get("description", ""),
+                "published": item.get("public_timestamp", ""),
+                "closing_date": item.get("closing_date", ""),
+                "organisations": item.get("organisations", []),
+            })
+
+        return consultations
+
+    except Exception as e:
+        st.error(f"Consultation fetch error: {e}")
+        return []
 
 @st.cache_data(ttl=1800)
 def fetch_hansard_debates(policy_area):
