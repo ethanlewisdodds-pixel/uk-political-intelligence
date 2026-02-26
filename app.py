@@ -73,6 +73,28 @@ CONSULTATION_KEYWORDS = {
     "Cabinet Office & Civil Service": ["civil service", "cabinet office", "public sector", "procurement"],
 }
 
+CONSULTATION_DEPARTMENTS = {
+    "Economy & Treasury": ["treasury", "hmrc", "revenue", "customs"],
+    "Health & Social Care": ["health", "social care", "dhsc"],
+    "Education": ["education", "dfe"],
+    "Home Affairs & Security": ["home office", "home affairs", "border"],
+    "Foreign Affairs & International Trade": ["foreign", "fcdo", "trade", "export"],
+    "Defence": ["defence", "mod", "ministry of defence"],
+    "Justice": ["justice", "attorney", "legal"],
+    "Environment & Rural Affairs": ["environment", "rural", "defra", "food"],
+    "Transport": ["transport", "dft", "highways", "maritime"],
+    "Housing & Planning": ["housing", "communities", "local government", "planning", "mhclg"],
+    "Work & Pensions": ["work", "pensions", "dwp"],
+    "Business & Industry": ["business", "trade", "dbt", "industry"],
+    "Science & Technology": ["science", "technology", "innovation", "dsit", "digital"],
+    "Culture, Media & Sport": ["culture", "media", "sport", "dcms", "gambling"],
+    "Energy & Net Zero": ["energy", "net zero", "desnz", "climate"],
+    "Northern Ireland": ["northern ireland"],
+    "Scotland": ["scotland office", "scottish"],
+    "Wales": ["wales office", "welsh"],
+    "Cabinet Office & Civil Service": ["cabinet office", "civil service"],
+}
+
 QUESTION_KEYWORDS = {
     "Economy & Treasury": ["tax", "finance", "treasury", "budget", "economic", "fiscal", "national insurance", "spending", "borrowing", "debt"],
     "Health & Social Care": ["health", "nhs", "hospital", "social care", "mental health", "medicine", "patient", "gp", "dentist", "ambulance"],
@@ -404,13 +426,24 @@ def fetch_bills():
         if len(all_bills) >= data.get("totalResults", 0):
             break
         skip += take
+
+    # Deduplicate by billId keeping most recent
     seen = {}
     for bill in all_bills:
         bill_id = bill.get("billId")
         last_update = bill.get("lastUpdate", "")
         if bill_id not in seen or last_update > seen[bill_id].get("lastUpdate", ""):
             seen[bill_id] = bill
-    return list(seen.values())
+
+    # Filter out bills that have already received Royal Assent or become Acts
+    active = []
+    for bill in seen.values():
+        stage = bill.get("currentStage", {})
+        stage_name = stage.get("description", "") if isinstance(stage, dict) else ""
+        if "royal assent" not in stage_name.lower() and not bill.get("isAct", False):
+            active.append(bill)
+
+    return active
 
 @st.cache_data(ttl=3600)
 def fetch_consultations():
@@ -429,35 +462,35 @@ def fetch_consultations():
     return []
 
 @st.cache_data(ttl=1800)
-def fetch_written_questions(policy_area):
+def fetch_hansard_debates(policy_area):
     keywords = QUESTION_KEYWORDS.get(policy_area, [])
     if not keywords:
         return []
-    since = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
-    all_questions = []
-    for keyword in keywords[:3]:
+    all_debates = []
+    for keyword in keywords[:2]:
         url = (
-            f"https://questions-api.parliament.uk/api/writtenquestions/questions"
-            f"?tabledWhenFrom={since}"
-            f"&searchTerm={requests.utils.quote(keyword)}"
+            f"https://hansard.parliament.uk/search/Contributions"
+            f"?searchTerm={requests.utils.quote(keyword)}"
+            f"&startDate={(datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')}"
+            f"&endDate={datetime.now().strftime('%Y-%m-%d')}"
             f"&house=Commons"
             f"&take=10"
-            f"&answered=Any"
+            f"&outputType=2"
         )
         try:
             response = requests.get(url, timeout=10)
             if response.status_code == 200:
-                items = response.json().get("results", [])
-                all_questions.extend(items)
+                items = response.json().get("Contributions", [])
+                all_debates.extend(items)
         except Exception:
             continue
     seen = {}
-    for q in all_questions:
-        qid = q.get("value", {}).get("id")
-        if qid and qid not in seen:
-            seen[qid] = q
+    for d in all_debates:
+        did = d.get("ContributionExtId", "")
+        if did and did not in seen:
+            seen[did] = d
     results = list(seen.values())
-    results.sort(key=lambda x: x.get("value", {}).get("dateTabled", ""), reverse=True)
+    results.sort(key=lambda x: x.get("SittingDate", ""), reverse=True)
     return results[:15]
 
 @st.cache_data(ttl=3600)
@@ -506,6 +539,16 @@ def get_str(field):
 def get_bill_stage_url(bill_id):
     return f"https://bills.parliament.uk/bills/{bill_id}"
 
+def consultation_matches(c, consult_keywords, consult_depts):
+    orgs = c.get("organisations", [])
+    org_text = " ".join([o.get("title", "") for o in orgs]).lower() if orgs else ""
+    text_match = match_policy(
+        get_str(c.get("title")) + " " + get_str(c.get("description")),
+        consult_keywords
+    )
+    dept_match = any(dept in org_text for dept in consult_depts)
+    return text_match and dept_match
+
 # ── SIDEBAR ───────────────────────────────────────────────────────
 
 st.sidebar.header("Filter by Policy Area")
@@ -515,7 +558,7 @@ st.sidebar.markdown("Data refreshes every **hour** automatically.")
 if st.sidebar.button("🔄 Refresh now"):
     st.cache_data.clear()
     st.rerun()
-        
+
 # ── PERSONNEL ─────────────────────────────────────────────────────
 
 st.subheader(f"👥 Key People — {selected_policy}")
@@ -578,13 +621,8 @@ with st.spinner("Fetching live consultations from GOV.UK..."):
     all_consultations = fetch_consultations()
 
 consult_keywords = CONSULTATION_KEYWORDS.get(selected_policy, [])
-filtered_consultations = [
-    c for c in all_consultations
-    if match_policy(
-        get_str(c.get("title")) + " " + get_str(c.get("description")),
-        consult_keywords
-    )
-]
+consult_depts = CONSULTATION_DEPARTMENTS.get(selected_policy, [])
+filtered_consultations = [c for c in all_consultations if consultation_matches(c, consult_keywords, consult_depts)]
 
 if filtered_consultations:
     st.success(f"{len(filtered_consultations)} open consultation(s) found")
@@ -607,39 +645,31 @@ else:
 
 st.markdown("---")
 
-# ── PARLIAMENTARY QUESTIONS ───────────────────────────────────────
+# ── HANSARD DEBATES ───────────────────────────────────────────────
 
-st.subheader(f"❓ Recent Parliamentary Questions — {selected_policy}")
-st.caption("Written questions tabled in the House of Commons in the last 30 days")
+st.subheader(f"🗣️ Recent Hansard Debates — {selected_policy}")
+st.caption("Contributions in the House of Commons in the last 30 days")
 
-with st.spinner("Fetching recent parliamentary questions..."):
-    questions = fetch_written_questions(selected_policy)
+with st.spinner("Fetching recent debates from Hansard..."):
+    debates = fetch_hansard_debates(selected_policy)
 
-if questions:
-    st.success(f"{len(questions)} recent question(s) found")
-    for q in questions:
-        val = q.get("value", {})
-        question_text = val.get("questionText", "No text available")
-        asked_by = val.get("askingMember", {}).get("name", "Unknown MP")
-        asking_party = val.get("askingMember", {}).get("party", "")
-        answering_body = val.get("answeringBodyName", "Unknown department")
-        date_tabled = format_date(val.get("dateTabled", ""))
-        answer = val.get("answer", {})
-        answer_text = answer.get("answerText", "") if answer else ""
-        answered = bool(answer_text)
-        status = "✅ Answered" if answered else "⏳ Awaiting answer"
-        uin = val.get("uin", "")
-        link = f"https://questions-statements.parliament.uk/written-questions/detail/{val.get('dateTabled', '')[:10]}/{uin}" if uin else ""
+if debates:
+    st.success(f"{len(debates)} recent contribution(s) found")
+    for d in debates:
+        member = d.get("AttributedTo", "Unknown MP")
+        date = format_date(d.get("SittingDate", ""))
+        debate_title = d.get("DebateSection", "Unknown debate")
+        text = d.get("Value", "")
+        clean_text = text.replace("<p>", "").replace("</p>", " ").replace("<br>", " ")
+        hansard_id = d.get("ContributionExtId", "")
+        url = f"https://hansard.parliament.uk/Commons/{d.get('SittingDate', '')[:10]}/debates/{hansard_id}" if hansard_id else ""
 
-        with st.expander(f"**{asked_by}** ({asking_party}) → {answering_body} · {date_tabled} · {status}"):
-            st.markdown(f"**Question:** {question_text}")
-            if answered:
-                clean_answer = answer_text.replace("<p>", "").replace("</p>", "\n").replace("<br>", "\n")
-                st.markdown(f"**Answer:** {clean_answer[:600]}{'...' if len(clean_answer) > 600 else ''}")
-            if link:
-                st.markdown(f"[🔗 View on Parliament website]({link})")
+        with st.expander(f"**{member}** · {debate_title} · {date}"):
+            st.markdown(clean_text[:600] + ("..." if len(clean_text) > 600 else ""))
+            if url:
+                st.markdown(f"[🔗 Read full contribution in Hansard]({url})")
 else:
-    st.info("No recent written questions found for this policy area.")
+    st.info("No recent Hansard contributions found for this policy area.")
 
 st.markdown("---")
 
@@ -661,13 +691,12 @@ if matched_committees:
     for committee in matched_committees:
         name = committee.get("name", "Unknown Committee")
         committee_id = committee.get("id")
-        chair_name = "See committee website"
-        phone = committee.get("phone", "")
-        email = committee.get("email", "")
+        contact = committee.get("contact", {}) or {}
+        phone = contact.get("phone", "")
+        email = contact.get("email", "")
         committee_url = f"https://committees.parliament.uk/committee/{committee_id}/" if committee_id else "https://committees.parliament.uk"
 
         with st.expander(f"**{name}**"):
-            st.markdown(f"**Chair:** {chair_name}")
             if phone:
                 st.markdown(f"**Phone:** {phone}")
             if email:
