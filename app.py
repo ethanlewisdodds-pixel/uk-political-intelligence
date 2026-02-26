@@ -435,7 +435,7 @@ def fetch_written_questions(policy_area):
         return []
     since = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
     all_questions = []
-    for keyword in keywords[:3]:  # limit to 3 keywords to avoid slow loads
+    for keyword in keywords[:3]:
         url = (
             f"https://questions-api.parliament.uk/api/writtenquestions/questions"
             f"?tabledWhenFrom={since}"
@@ -451,13 +451,11 @@ def fetch_written_questions(policy_area):
                 all_questions.extend(items)
         except Exception:
             continue
-    # Deduplicate by question ID
     seen = {}
     for q in all_questions:
         qid = q.get("value", {}).get("id")
         if qid and qid not in seen:
             seen[qid] = q
-    # Sort by date descending
     results = list(seen.values())
     results.sort(key=lambda x: x.get("value", {}).get("dateTabled", ""), reverse=True)
     return results[:15]
@@ -487,6 +485,11 @@ def format_date(date_str):
         return dt.strftime("%-d %B %Y")
     except Exception:
         return date_str[:10]
+
+def get_str(field):
+    if isinstance(field, dict):
+        return field.get("value", "")
+    return field or ""
 
 def get_bill_stage_url(bill_id):
     return f"https://bills.parliament.uk/bills/{bill_id}"
@@ -562,11 +565,7 @@ st.subheader(f"📣 Open Consultations — {selected_policy}")
 with st.spinner("Fetching live consultations from GOV.UK..."):
     all_consultations = fetch_consultations()
 
-def get_str(field):
-    if isinstance(field, dict):
-        return field.get("value", "")
-    return field or ""
-
+consult_keywords = CONSULTATION_KEYWORDS.get(selected_policy, [])
 filtered_consultations = [
     c for c in all_consultations
     if match_policy(
@@ -641,7 +640,6 @@ with st.spinner("Fetching committee information..."):
     all_committees = fetch_committees()
 
 relevant_names = COMMITTEE_MAP.get(selected_policy, [])
-
 matched_committees = [
     c for c in all_committees
     if any(name.lower() in c.get("name", "").lower() for name in relevant_names)
