@@ -5,109 +5,8 @@ import re
 from datetime import datetime, timedelta
 
 st.set_page_config(page_title="UK Political Intelligence", layout="wide")
-st.markdown(
-    """
-    <style>
-        :root {
-            --bg-primary: #0b1f17;
-            --bg-secondary: #112b21;
-            --surface: #163428;
-            --surface-soft: #1c3d2f;
-            --gold: #c6a65b;
-            --gold-soft: #e1c98d;
-            --cream: #f3ecd9;
-            --text-main: #f2eddf;
-            --text-muted: #d7ccb3;
-        }
-        .stApp {
-            background: radial-gradient(circle at top right, #1b3f31 0%, var(--bg-secondary) 26%, var(--bg-primary) 68%);
-            color: var(--text-main);
-        }
-        section[data-testid="stSidebar"] {
-            background: linear-gradient(180deg, #10261d 0%, #0c1f18 100%);
-            border-right: 1px solid rgba(198, 166, 91, 0.35);
-        }
-        .hero-banner {
-            background: linear-gradient(130deg, #0f2a20 0%, #143729 58%, #0f2a20 100%);
-            color: var(--text-main);
-            border-radius: 16px;
-            border: 1px solid rgba(198, 166, 91, 0.45);
-            padding: 1.4rem 1.6rem;
-            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
-            margin-bottom: 1.2rem;
-        }
-        .hero-kicker {
-            color: var(--gold-soft);
-            text-transform: uppercase;
-            letter-spacing: 0.09em;
-            font-size: 0.75rem;
-            margin-bottom: 0.2rem;
-            font-weight: 600;
-        }
-        .hero-title {
-            font-size: 2.1rem;
-            font-weight: 700;
-            margin: 0;
-            color: var(--cream);
-        }
-        .hero-subtitle {
-            margin-top: 0.4rem;
-            color: var(--text-muted);
-            font-size: 0.96rem;
-            max-width: 72ch;
-        }
-        .section-note {
-            color: var(--gold-soft);
-            font-size: 0.88rem;
-            margin-top: -0.35rem;
-            margin-bottom: 0.6rem;
-        }
-        .stMarkdown, .stCaption, .stText, p, label {
-            color: var(--text-main);
-        }
-        [data-testid="stMetric"] {
-            background: linear-gradient(170deg, rgba(22, 52, 40, 0.95) 0%, rgba(18, 44, 34, 0.98) 100%);
-            border: 1px solid rgba(198, 166, 91, 0.4);
-            border-radius: 12px;
-            padding: 0.65rem 0.85rem;
-        }
-        [data-testid="stMetricLabel"], [data-testid="stMetricDelta"] {
-            color: var(--text-muted);
-        }
-        [data-testid="stMetricValue"] {
-            color: var(--cream);
-        }
-        div[data-testid="stExpander"] {
-            border: 1px solid rgba(198, 166, 91, 0.32);
-            border-radius: 12px;
-            background: linear-gradient(180deg, rgba(23, 53, 41, 0.82) 0%, rgba(17, 40, 31, 0.88) 100%);
-        }
-        .stDataFrame {
-            border: 1px solid rgba(198, 166, 91, 0.28);
-            border-radius: 12px;
-            overflow: hidden;
-        }
-        [data-testid="stProgressBar"] > div > div {
-            background: linear-gradient(90deg, #a7863a 0%, #d6ba79 100%);
-        }
-        hr {
-            border-color: rgba(198, 166, 91, 0.4);
-        }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
-
-st.markdown(
-    """
-    <div class="hero-banner">
-        <div class="hero-kicker">United Kingdom Parliamentary Monitoring</div>
-        <h1 class="hero-title">UK Political Intelligence</h1>
-        <div class="hero-subtitle">A professional, continuously refreshed brief of UK legislation, parliamentary scrutiny and consultations.</div>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
+st.title("🇬🇧 UK Political Intelligence")
+st.caption("Live data from the UK Parliament API & GOV.UK")
 
 POLICY_AREAS = [
     "Economy & Treasury",
@@ -526,13 +425,10 @@ def fetch_bills():
     session_start = "2024-07-04"
     while True:
         url = f"https://bills-api.parliament.uk/api/v1/Bills?CurrentHouse=All&IsDefeated=false&Skip={skip}&Take={take}"
-        try:
-            response = requests.get(url, timeout=10)
-            if response.status_code != 200:
-                break
-            data = response.json()
-        except Exception:
+        response = requests.get(url, timeout=10)
+        if response.status_code != 200:
             break
+        data = response.json()
         items = data.get("items", [])
         if not items:
             break
@@ -660,42 +556,6 @@ def format_date(date_str):
     except Exception:
         return date_str[:10]
 
-
-def parse_iso_date(date_str):
-    if not date_str:
-        return None
-    try:
-        return datetime.fromisoformat(date_str.replace("Z", "+00:00"))
-    except Exception:
-        return None
-
-
-def estimate_next_sitting_day(from_date=None):
-    base = from_date or datetime.utcnow()
-    candidate = base + timedelta(days=1)
-    while candidate.weekday() >= 5:
-        candidate += timedelta(days=1)
-    return candidate
-
-
-def stage_progress_score(stage_name):
-    stage_lower = (stage_name or "").lower()
-    if "first reading" in stage_lower:
-        return 15
-    if "second reading" in stage_lower:
-        return 30
-    if "committee" in stage_lower:
-        return 50
-    if "report" in stage_lower:
-        return 65
-    if "third reading" in stage_lower:
-        return 80
-    if "consideration of amendments" in stage_lower or "ping pong" in stage_lower:
-        return 90
-    if "royal assent" in stage_lower:
-        return 100
-    return 20
-
 def get_str(field):
     if isinstance(field, dict):
         return field.get("value", "")
@@ -751,7 +611,6 @@ st.markdown("---")
 # ── BILLS ─────────────────────────────────────────────────────────
 
 st.subheader(f"📋 Bills in Parliament — {selected_policy}")
-st.markdown("<div class='section-note'>Enhanced situational view: stage progression, update cadence, and likely next sitting day.</div>", unsafe_allow_html=True)
 with st.spinner("Fetching live bills from Parliament..."):
     bills = fetch_bills()
 
@@ -760,47 +619,6 @@ filtered_bills = [b for b in bills if match_policy(b.get("shortTitle", "") + " "
 
 if filtered_bills:
     st.success(f"{len(filtered_bills)} bill(s) found for this policy area")
-    today_utc = datetime.utcnow()
-    next_sitting = estimate_next_sitting_day(today_utc)
-    days_until_next_sitting = (next_sitting.date() - today_utc.date()).days
-    recent_activity = sorted(
-        [parse_iso_date(b.get("lastUpdate", "")) for b in filtered_bills if parse_iso_date(b.get("lastUpdate", ""))],
-        reverse=True,
-    )
-    freshest_update = recent_activity[0].strftime("%-d %B %Y") if recent_activity else "Unknown"
-
-    bill_metrics = []
-    for bill in filtered_bills:
-        stage = bill.get("currentStage", {})
-        stage_name = stage.get("description", "Unknown stage") if isinstance(stage, dict) else "Unknown stage"
-        updated_at = parse_iso_date(bill.get("lastUpdate", ""))
-        days_since_update = (today_utc.date() - updated_at.date()).days if updated_at else None
-        bill_metrics.append(
-            {
-                "Bill": bill.get("shortTitle", "Untitled Bill"),
-                "Stage": stage_name,
-                "Progress": stage_progress_score(stage_name),
-                "Days since update": days_since_update if days_since_update is not None else -1,
-            }
-        )
-
-    metric_col_1, metric_col_2, metric_col_3 = st.columns(3)
-    metric_col_1.metric("Active bills (policy area)", len(filtered_bills))
-    metric_col_2.metric("Most recent bill update", freshest_update)
-    metric_col_3.metric("Days until next likely sitting day", days_until_next_sitting)
-
-    df_metrics = pd.DataFrame(bill_metrics)
-    chart_col, table_col = st.columns([1.1, 1.3])
-    with chart_col:
-        st.caption("Estimated progress to Royal Assent (stage-weighted)")
-        stage_chart = df_metrics[["Bill", "Progress"]].set_index("Bill").sort_values("Progress", ascending=False)
-        st.bar_chart(stage_chart)
-    with table_col:
-        st.caption("Live bill monitoring table")
-        display_df = df_metrics.copy()
-        display_df["Days since update"] = display_df["Days since update"].replace(-1, "Unknown")
-        st.dataframe(display_df, use_container_width=True, hide_index=True)
-
     for bill in filtered_bills:
         bill_id = bill.get("billId")
         title = bill.get("shortTitle", "Untitled Bill")
@@ -808,19 +626,13 @@ if filtered_bills:
         stage_name = stage.get("description", "Unknown stage") if isinstance(stage, dict) else "Unknown stage"
         house = bill.get("originatingHouse", "")
         bill_type = bill.get("billType", {}).get("name", "")
-        parsed_update = parse_iso_date(bill.get("lastUpdate", ""))
         last_update = format_date(bill.get("lastUpdate", ""))
-        days_since_update = (today_utc.date() - parsed_update.date()).days if parsed_update else None
-        progress_value = stage_progress_score(stage_name)
         url = get_bill_stage_url(bill_id)
         with st.expander(f"**{title}**"):
-            st.progress(progress_value / 100, text=f"Legislative progress estimate: {progress_value}%")
             st.markdown(f"**Current Stage:** {stage_name}")
             st.markdown(f"**Originating House:** {house}")
             st.markdown(f"**Bill Type:** {bill_type}")
             st.markdown(f"**Last Updated:** {last_update}")
-            if days_since_update is not None:
-                st.markdown(f"**Days Since Last Update:** {days_since_update}")
             st.markdown(f"[🔗 View full bill details on Parliament website]({url})")
 else:
     st.info("No active bills found for this policy area.")
