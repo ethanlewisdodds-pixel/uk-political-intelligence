@@ -515,37 +515,6 @@ st.sidebar.markdown("Data refreshes every **hour** automatically.")
 if st.sidebar.button("🔄 Refresh now"):
     st.cache_data.clear()
     st.rerun()
-
-# ── TEMPORARY DEBUG ───────────────────────────────────────────────
-
-with st.expander("🔧 Debug: Raw API responses (remove when done)"):
-    st.markdown("**Committees API:**")
-    try:
-        r = requests.get("https://committees-api.parliament.uk/api/Committees?house=Commons&CurrentlyActive=true", timeout=10)
-        st.json(r.json())
-    except Exception as e:
-        st.error(f"Committees error: {e}")
-
-    st.markdown("**Questions API:**")
-    try:
-        r = requests.get("https://questions-api.parliament.uk/api/writtenquestions/questions?tabledWhenFrom=2025-01-01&searchTerm=health&house=Commons&take=2&answered=Any", timeout=10)
-        st.json(r.json())
-    except Exception as e:
-        st.error(f"Questions error: {e}")# ── TEMPORARY DEBUG ───────────────────────────────────────────────
-with st.expander("🔧 Debug: Raw API responses (remove when done)"):
-    st.markdown("**Committees API:**")
-    try:
-        r = requests.get("https://committees-api.parliament.uk/api/Committees?house=Commons&CurrentlyActive=true", timeout=10)
-        st.json(r.json())
-    except Exception as e:
-        st.error(f"Committees error: {e}")
-
-    st.markdown("**Questions API:**")
-    try:
-        r = requests.get("https://questions-api.parliament.uk/api/writtenquestions/questions?tabledWhenFrom=2025-01-01&searchTerm=health&house=Commons&take=2&answered=Any", timeout=10)
-        st.json(r.json())
-    except Exception as e:
-        st.error(f"Questions error: {e}")
         
 # ── PERSONNEL ─────────────────────────────────────────────────────
 
