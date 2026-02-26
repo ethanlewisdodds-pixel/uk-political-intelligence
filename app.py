@@ -562,11 +562,15 @@ st.subheader(f"📣 Open Consultations — {selected_policy}")
 with st.spinner("Fetching live consultations from GOV.UK..."):
     all_consultations = fetch_consultations()
 
-consult_keywords = CONSULTATION_KEYWORDS.get(selected_policy, [])
+def get_str(field):
+    if isinstance(field, dict):
+        return field.get("value", "")
+    return field or ""
+
 filtered_consultations = [
     c for c in all_consultations
     if match_policy(
-        c.get("title", {}).get("value", "") + " " + c.get("description", {}).get("value", ""),
+        get_str(c.get("title")) + " " + get_str(c.get("description")),
         consult_keywords
     )
 ]
@@ -574,8 +578,8 @@ filtered_consultations = [
 if filtered_consultations:
     st.success(f"{len(filtered_consultations)} open consultation(s) found")
     for c in filtered_consultations:
-        title = c.get("title", {}).get("value", "Untitled")
-        description = c.get("description", {}).get("value", "No description available.")
+        title = get_str(c.get("title")) or "Untitled"
+        description = get_str(c.get("description")) or "No description available."
         link = "https://www.gov.uk" + c.get("link", "")
         closing = c.get("closing_date", [{}])
         closing_date = closing[0].get("value", "") if closing else ""
