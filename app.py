@@ -443,7 +443,19 @@ def fetch_bills():
         if "royal assent" not in stage_name.lower() and not bill.get("isAct", False):
             active.append(bill)
 
-    return active
+    # Secondary de-duplication: keep one entry per title/session pair.
+    # Parliament may return separate records for what users perceive as the
+    # same bill title, so this keeps the most recently updated one for display.
+    deduped_by_title = {}
+    for bill in active:
+        title = (bill.get("shortTitle") or "").strip().lower()
+        session_id = bill.get("introducedSessionId")
+        key = (title, session_id)
+        last_update = bill.get("lastUpdate", "")
+        if key not in deduped_by_title or last_update > deduped_by_title[key].get("lastUpdate", ""):
+            deduped_by_title[key] = bill
+
+    return list(deduped_by_title.values())
 
 @st.cache_data(ttl=3600)
 def fetch_consultations():
