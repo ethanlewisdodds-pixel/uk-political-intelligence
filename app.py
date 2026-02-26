@@ -55,6 +55,7 @@ def fetch_bills():
     all_bills = []
     skip = 0
     take = 100
+    session_start = "2024-07-04"
     while True:
         url = f"https://bills-api.parliament.uk/api/v1/Bills?CurrentHouse=All&IsDefeated=false&Skip={skip}&Take={take}"
         response = requests.get(url, timeout=10)
@@ -64,11 +65,23 @@ def fetch_bills():
         items = data.get("items", [])
         if not items:
             break
-        all_bills.extend(items)
+        for bill in items:
+            last_update = bill.get("lastUpdate", "")
+            if last_update >= session_start:
+                all_bills.append(bill)
         if len(all_bills) >= data.get("totalResults", 0):
             break
         skip += take
-    return all_bills
+
+    # Deduplicate by billId, keeping the entry with the most recent lastUpdate
+    seen = {}
+    for bill in all_bills:
+        bill_id = bill.get("billId")
+        last_update = bill.get("lastUpdate", "")
+        if bill_id not in seen or last_update > seen[bill_id].get("lastUpdate", ""):
+            seen[bill_id] = bill
+
+    return list(seen.values())
 
 def match_policy(bill_title, keywords):
     title_lower = bill_title.lower()
