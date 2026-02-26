@@ -462,14 +462,26 @@ def fetch_written_questions(policy_area):
 
 @st.cache_data(ttl=3600)
 def fetch_committees():
-    url = "https://committees-api.parliament.uk/api/Committees?house=Commons&CurrentlyActive=true"
-    try:
-        response = requests.get(url, timeout=10)
-        if response.status_code == 200:
-            return response.json().get("items", [])
-    except Exception:
-        pass
-    return []
+    all_committees = []
+    skip = 0
+    take = 30
+    while True:
+        url = f"https://committees-api.parliament.uk/api/Committees?house=Commons&CurrentlyActive=true&skip={skip}&take={take}"
+        try:
+            response = requests.get(url, timeout=10)
+            if response.status_code != 200:
+                break
+            data = response.json()
+            items = data.get("items", [])
+            if not items:
+                break
+            all_committees.extend(items)
+            if len(all_committees) >= data.get("totalResults", 0):
+                break
+            skip += take
+        except Exception:
+            break
+    return all_committees
 
 # ── HELPERS ──────────────────────────────────────────────────────
 
@@ -680,8 +692,7 @@ if matched_committees:
     for committee in matched_committees:
         name = committee.get("name", "Unknown Committee")
         committee_id = committee.get("id")
-        chair = committee.get("currentChair", [{}])
-        chair_name = chair[0].get("member", {}).get("name", "Unknown") if chair else "Unknown"
+        chair_name = "See committee website"
         phone = committee.get("phone", "")
         email = committee.get("email", "")
         committee_url = f"https://committees.parliament.uk/committee/{committee_id}/" if committee_id else "https://committees.parliament.uk"
