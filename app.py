@@ -564,6 +564,66 @@ def get_str(field):
 def get_bill_stage_url(bill_id):
     return f"https://bills.parliament.uk/bills/{bill_id}"
 
+
+def get_primary_sponsor(bill):
+    sponsors = bill.get("sponsors", [])
+    if isinstance(sponsors, list) and sponsors:
+        primary = sponsors[0]
+        if isinstance(primary, dict):
+            sponsor_name = primary.get("name") or primary.get("member", {}).get("name") or "Unknown sponsor"
+            sponsor_party = primary.get("party") or primary.get("member", {}).get("party") or "Unknown party"
+            return sponsor_name, sponsor_party
+    return "Unknown sponsor", "Unknown party"
+
+
+def get_bill_ownership_label(bill):
+    is_government_bill = bill.get("isGovernmentBill")
+    bill_type_name = bill.get("billType", {}).get("name", "")
+    if is_government_bill is True:
+        return "Government Bill"
+    if is_government_bill is False:
+        return "Private Member's Bill"
+    if isinstance(bill_type_name, str):
+        lowered = bill_type_name.lower()
+        if "government" in lowered:
+            return "Government Bill"
+        if "private member" in lowered:
+            return "Private Member's Bill"
+    return "Other Bill"
+
+
+def get_bill_progress_index(stage_name):
+    if not isinstance(stage_name, str):
+        return 0
+    lowered = stage_name.lower()
+    ordered_stage_markers = [
+        ["first reading"],
+        ["committee"],
+        ["report"],
+        ["third reading"],
+        ["house of lords", "lords"],
+        ["royal assent"],
+    ]
+    for idx, markers in enumerate(ordered_stage_markers):
+        if any(marker in lowered for marker in markers):
+            return idx + 1
+    return 0
+
+
+def get_days_since_update(last_update_raw):
+    if not isinstance(last_update_raw, str) or not last_update_raw:
+        return None
+    try:
+        clean = last_update_raw.replace("Z", "+00:00")
+        last_dt = datetime.fromisoformat(clean)
+        if last_dt.tzinfo is not None:
+            now = datetime.now(last_dt.tzinfo)
+        else:
+            now = datetime.now()
+        return max((now - last_dt).days, 0)
+    except ValueError:
+        return None
+
 def consultation_matches(c, consult_keywords, consult_depts):
     orgs = c.get("organisations", [])
     org_text = " ".join([o.get("title", "") for o in orgs]).lower() if orgs else ""
@@ -616,9 +676,11 @@ with st.spinner("Fetching live bills from Parliament..."):
 
 bill_keywords = POLICY_BILL_KEYWORDS.get(selected_policy, [])
 filtered_bills = [b for b in bills if match_policy(b.get("shortTitle", "") + " " + b.get("longTitle", ""), bill_keywords)]
+filtered_bills.sort(key=lambda b: b.get("lastUpdate", ""), reverse=True)
 
 if filtered_bills:
     st.success(f"{len(filtered_bills)} bill(s) found for this policy area")
+    progress_labels = ["First Reading", "Committee", "Report", "Third Reading", "Lords", "Royal Assent"]
     for bill in filtered_bills:
         bill_id = bill.get("billId")
         title = bill.get("shortTitle", "Untitled Bill")
@@ -626,13 +688,35 @@ if filtered_bills:
         stage_name = stage.get("description", "Unknown stage") if isinstance(stage, dict) else "Unknown stage"
         house = bill.get("originatingHouse", "")
         bill_type = bill.get("billType", {}).get("name", "")
+        ownership_label = get_bill_ownership_label(bill)
+        sponsor_name, sponsor_party = get_primary_sponsor(bill)
+        progress_idx = get_bill_progress_index(stage_name)
+        progress_position = progress_idx if progress_idx > 0 else 1
+        progress_text = " → ".join(progress_labels[:progress_position])
+        days_since_update = get_days_since_update(bill.get("lastUpdate", ""))
+        committee_flag = "committee" in stage_name.lower()
+
         last_update = format_date(bill.get("lastUpdate", ""))
         url = get_bill_stage_url(bill_id)
         with st.expander(f"**{title}**"):
+            if ownership_label == "Government Bill":
+                st.badge("Government Bill", color="blue")
+            elif ownership_label == "Private Member's Bill":
+                st.badge("Private Member's Bill", color="orange")
+            else:
+                st.badge(ownership_label, color="gray")
+
             st.markdown(f"**Current Stage:** {stage_name}")
+            st.markdown(f"**Progress:** {progress_text}")
+            st.progress(progress_position / len(progress_labels), text=f"Stage {progress_position} of {len(progress_labels)}")
+            if committee_flag:
+                st.warning("⚠️ This bill is in Committee stage — key lobbying window.")
+            st.markdown(f"**Sponsor:** {sponsor_name} ({sponsor_party})")
             st.markdown(f"**Originating House:** {house}")
             st.markdown(f"**Bill Type:** {bill_type}")
             st.markdown(f"**Last Updated:** {last_update}")
+            if days_since_update is not None:
+                st.markdown(f"**Days Since Last Update:** {days_since_update}")
             st.markdown(f"[🔗 View full bill details on Parliament website]({url})")
 else:
     st.info("No active bills found for this policy area.")
