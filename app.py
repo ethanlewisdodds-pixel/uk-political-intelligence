@@ -8,44 +8,90 @@ st.set_page_config(page_title="UK Political Intelligence", layout="wide")
 st.markdown(
     """
     <style>
+        :root {
+            --bg-primary: #0b1f17;
+            --bg-secondary: #112b21;
+            --surface: #163428;
+            --surface-soft: #1c3d2f;
+            --gold: #c6a65b;
+            --gold-soft: #e1c98d;
+            --cream: #f3ecd9;
+            --text-main: #f2eddf;
+            --text-muted: #d7ccb3;
+        }
         .stApp {
-            background: linear-gradient(145deg, #f5f7fa 0%, #eef1f5 35%, #e4e9f0 100%);
-            color: #1d2630;
+            background: radial-gradient(circle at top right, #1b3f31 0%, var(--bg-secondary) 26%, var(--bg-primary) 68%);
+            color: var(--text-main);
+        }
+        section[data-testid="stSidebar"] {
+            background: linear-gradient(180deg, #10261d 0%, #0c1f18 100%);
+            border-right: 1px solid rgba(198, 166, 91, 0.35);
         }
         .hero-banner {
-            background: linear-gradient(120deg, #0b1f3a 0%, #16335c 45%, #1f4d7a 100%);
-            color: #f8fbff;
-            border-radius: 14px;
-            border: 1px solid rgba(255, 255, 255, 0.12);
-            padding: 1.25rem 1.5rem;
-            box-shadow: 0 10px 24px rgba(11, 31, 58, 0.18);
-            margin-bottom: 1rem;
+            background: linear-gradient(130deg, #0f2a20 0%, #143729 58%, #0f2a20 100%);
+            color: var(--text-main);
+            border-radius: 16px;
+            border: 1px solid rgba(198, 166, 91, 0.45);
+            padding: 1.4rem 1.6rem;
+            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
+            margin-bottom: 1.2rem;
         }
         .hero-kicker {
-            color: #c3d4eb;
+            color: var(--gold-soft);
             text-transform: uppercase;
-            letter-spacing: 0.08em;
+            letter-spacing: 0.09em;
             font-size: 0.75rem;
-            margin-bottom: 0.15rem;
+            margin-bottom: 0.2rem;
+            font-weight: 600;
         }
         .hero-title {
-            font-size: 2rem;
-            font-weight: 650;
+            font-size: 2.1rem;
+            font-weight: 700;
             margin: 0;
+            color: var(--cream);
         }
         .hero-subtitle {
-            margin-top: 0.35rem;
-            color: #dae6f5;
-            font-size: 0.95rem;
+            margin-top: 0.4rem;
+            color: var(--text-muted);
+            font-size: 0.96rem;
+            max-width: 72ch;
         }
         .section-note {
-            color: #4b5d70;
+            color: var(--gold-soft);
             font-size: 0.88rem;
             margin-top: -0.35rem;
             margin-bottom: 0.6rem;
         }
+        .stMarkdown, .stCaption, .stText, p, label {
+            color: var(--text-main);
+        }
+        [data-testid="stMetric"] {
+            background: linear-gradient(170deg, rgba(22, 52, 40, 0.95) 0%, rgba(18, 44, 34, 0.98) 100%);
+            border: 1px solid rgba(198, 166, 91, 0.4);
+            border-radius: 12px;
+            padding: 0.65rem 0.85rem;
+        }
+        [data-testid="stMetricLabel"], [data-testid="stMetricDelta"] {
+            color: var(--text-muted);
+        }
         [data-testid="stMetricValue"] {
-            color: #0b1f3a;
+            color: var(--cream);
+        }
+        div[data-testid="stExpander"] {
+            border: 1px solid rgba(198, 166, 91, 0.32);
+            border-radius: 12px;
+            background: linear-gradient(180deg, rgba(23, 53, 41, 0.82) 0%, rgba(17, 40, 31, 0.88) 100%);
+        }
+        .stDataFrame {
+            border: 1px solid rgba(198, 166, 91, 0.28);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        [data-testid="stProgressBar"] > div > div {
+            background: linear-gradient(90deg, #a7863a 0%, #d6ba79 100%);
+        }
+        hr {
+            border-color: rgba(198, 166, 91, 0.4);
         }
     </style>
     """,
@@ -56,8 +102,8 @@ st.markdown(
     """
     <div class="hero-banner">
         <div class="hero-kicker">United Kingdom Parliamentary Monitoring</div>
-        <h1 class="hero-title">🇬🇧 UK Political Intelligence</h1>
-        <div class="hero-subtitle">Live legislative, scrutiny, and consultation tracking powered by UK Parliament and GOV.UK data.</div>
+        <h1 class="hero-title">UK Political Intelligence</h1>
+        <div class="hero-subtitle">A professional, continuously refreshed brief of UK legislation, parliamentary scrutiny and consultations.</div>
     </div>
     """,
     unsafe_allow_html=True,
