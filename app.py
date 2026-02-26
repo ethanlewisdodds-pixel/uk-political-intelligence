@@ -403,6 +403,14 @@ ROLE_COLOURS = {
     "Civil Servant": "#4A4A8A",
 }
 
+
+BILL_TYPE_ID_FALLBACK = {
+    1: "Public Bill",
+    2: "Private Bill",
+    3: "Hybrid Bill",
+    4: "Private Members' Bill",
+}
+
 # ── DATA FETCHING ────────────────────────────────────────────────
 
 def normalise_bill_title(bill):
@@ -610,8 +618,59 @@ def get_bill_type_name(bill):
 
     bill_type_id = bill.get("billTypeId")
     if bill_type_id:
-        return f"Type ID {bill_type_id}"
+        return BILL_TYPE_ID_FALLBACK.get(bill_type_id, f"Type {bill_type_id}")
     return "Not available"
+
+
+def classify_bill_category(bill_type_name):
+    label = (bill_type_name or "").lower()
+    if "private member" in label:
+        return "Private Members' Bill"
+    if "government" in label:
+        return "Government Bill"
+    if "private bill" in label:
+        return "Private Bill"
+    if "hybrid" in label:
+        return "Hybrid Bill"
+    if "public bill" in label:
+        return "Public Bill"
+    return "Not stated"
+
+
+def get_sponsor_party_and_name(bill):
+    def pick_value(candidate, keys):
+        if not isinstance(candidate, dict):
+            return ""
+        for key in keys:
+            value = candidate.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+            if isinstance(value, dict):
+                nested = pick_value(value, keys)
+                if nested:
+                    return nested
+        return ""
+
+    bill_id = bill.get("billId")
+    details = fetch_bill_details(bill_id)
+
+    possible_blocks = []
+    for source in [bill, details if isinstance(details, dict) else {}]:
+        for key in ["sponsors", "billSponsors", "sponsor", "primarySponsor", "memberSponsor", "introducedBy"]:
+            value = source.get(key)
+            if isinstance(value, list):
+                possible_blocks.extend(value)
+            elif isinstance(value, dict):
+                possible_blocks.append(value)
+
+    if not possible_blocks:
+        return "Not stated", "Not stated"
+
+    sponsor = possible_blocks[0]
+    party = pick_value(sponsor, ["party", "partyName", "memberParty", "partyAbbreviation", "partyShortName"])
+    name = pick_value(sponsor, ["name", "fullName", "memberName", "displayName", "memberPrinted"])
+
+    return party or "Not stated", name or "Not stated"
 
 def consultation_matches(c, consult_keywords, consult_depts):
     orgs = c.get("organisations", [])
@@ -675,12 +734,17 @@ if filtered_bills:
         stage_name = stage.get("description", "Unknown stage") if isinstance(stage, dict) else "Unknown stage"
         house = bill.get("originatingHouse", "")
         bill_type = get_bill_type_name(bill)
+        bill_category = classify_bill_category(bill_type)
+        sponsor_party, sponsor_name = get_sponsor_party_and_name(bill)
         last_update = format_date(bill.get("lastUpdate", ""))
         url = get_bill_stage_url(bill_id)
         with st.expander(f"**{title}**"):
             st.markdown(f"**Current Stage:** {stage_name}")
             st.markdown(f"**Originating House:** {house}")
             st.markdown(f"**Bill Type:** {bill_type}")
+            st.markdown(f"**Bill Category:** {bill_category}")
+            st.markdown(f"**Lead Sponsor:** {sponsor_name}")
+            st.markdown(f"**Sponsoring Party:** {sponsor_party}")
             st.markdown(f"**Last Updated:** {last_update}")
             st.markdown(f"[🔗 View full bill details on Parliament website]({url})")
 else:
