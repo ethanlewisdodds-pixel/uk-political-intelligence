@@ -2,7 +2,7 @@ import streamlit as st
 import requests
 import pandas as pd
 import re
-from datetime import datetime, timedelta
+from datetime import datetime
 
 st.set_page_config(page_title="UK Political Intelligence", layout="wide")
 st.title("🇬🇧 UK Political Intelligence")
@@ -491,13 +491,21 @@ def fetch_hansard_debates(policy_area):
     keywords = QUESTION_KEYWORDS.get(policy_area, [])
     if not keywords:
         return []
+
+    def extract_contributions(payload):
+        if not isinstance(payload, dict):
+            return []
+        for key in ["Contributions", "contributions", "Items", "items", "Results", "results"]:
+            value = payload.get(key, [])
+            if isinstance(value, list):
+                return value
+        return []
+
     all_debates = []
     for keyword in keywords[:2]:
         url = (
             f"https://hansard.parliament.uk/search/Contributions"
             f"?searchTerm={requests.utils.quote(keyword)}"
-            f"&startDate={(datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')}"
-            f"&endDate={datetime.now().strftime('%Y-%m-%d')}"
             f"&house=Commons"
             f"&take=10"
             f"&outputType=2"
@@ -505,7 +513,7 @@ def fetch_hansard_debates(policy_area):
         try:
             response = requests.get(url, timeout=10)
             if response.status_code == 200:
-                items = response.json().get("Contributions", [])
+                items = extract_contributions(response.json())
                 all_debates.extend(items)
         except Exception:
             continue
@@ -563,6 +571,47 @@ def get_str(field):
 
 def get_bill_stage_url(bill_id):
     return f"https://bills.parliament.uk/bills/{bill_id}"
+
+
+@st.cache_data(ttl=3600)
+def fetch_bill_details(bill_id):
+    if not bill_id:
+        return {}
+    url = f"https://bills-api.parliament.uk/api/v1/Bills/{bill_id}"
+    try:
+        response = requests.get(url, timeout=10)
+        if response.status_code == 200:
+            return response.json()
+    except Exception:
+        pass
+    return {}
+
+
+def get_bill_type_name(bill):
+    raw_type = bill.get("billType", {})
+    if isinstance(raw_type, dict):
+        type_name = raw_type.get("name", "")
+        if type_name:
+            return type_name
+    elif isinstance(raw_type, str) and raw_type:
+        return raw_type
+
+    # Some list payloads do not include full billType details, so fall back to
+    # the single-bill endpoint and then to billTypeId as a last resort.
+    bill_id = bill.get("billId")
+    details = fetch_bill_details(bill_id)
+    details_type = details.get("billType", {}) if isinstance(details, dict) else {}
+    if isinstance(details_type, dict):
+        details_name = details_type.get("name", "")
+        if details_name:
+            return details_name
+    elif isinstance(details_type, str) and details_type:
+        return details_type
+
+    bill_type_id = bill.get("billTypeId")
+    if bill_type_id:
+        return f"Type ID {bill_type_id}"
+    return "Not available"
 
 def consultation_matches(c, consult_keywords, consult_depts):
     orgs = c.get("organisations", [])
@@ -625,7 +674,7 @@ if filtered_bills:
         stage = bill.get("currentStage", {})
         stage_name = stage.get("description", "Unknown stage") if isinstance(stage, dict) else "Unknown stage"
         house = bill.get("originatingHouse", "")
-        bill_type = bill.get("billType", {}).get("name", "")
+        bill_type = get_bill_type_name(bill)
         last_update = format_date(bill.get("lastUpdate", ""))
         url = get_bill_stage_url(bill_id)
         with st.expander(f"**{title}**"):
