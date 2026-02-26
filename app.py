@@ -1,6 +1,7 @@
 import streamlit as st
 import requests
 import pandas as pd
+import re
 from datetime import datetime, timedelta
 
 st.set_page_config(page_title="UK Political Intelligence", layout="wide")
@@ -404,6 +405,18 @@ ROLE_COLOURS = {
 
 # ── DATA FETCHING ────────────────────────────────────────────────
 
+def normalise_bill_title(bill):
+    """Create a stable key so user-visible duplicate bills collapse reliably."""
+    short_title = (bill.get("shortTitle") or "").strip()
+    long_title = (bill.get("longTitle") or "").strip()
+    base_title = short_title or long_title
+    # Remove bracketed variants like [HL], [Lords], etc.
+    base_title = re.sub(r"\[[^\]]+\]", "", base_title)
+    # Keep only letters/numbers to avoid punctuation and apostrophe variants.
+    base_title = re.sub(r"[^a-z0-9]", "", base_title.lower())
+    return base_title
+
+
 @st.cache_data(ttl=3600)
 def fetch_bills():
     all_bills = []
@@ -443,17 +456,17 @@ def fetch_bills():
         if "royal assent" not in stage_name.lower() and not bill.get("isAct", False):
             active.append(bill)
 
-    # Secondary de-duplication: keep one entry per title/session pair.
-    # Parliament may return separate records for what users perceive as the
-    # same bill title, so this keeps the most recently updated one for display.
+    # Secondary de-duplication: collapse user-visible duplicates by normalized
+    # title and keep the most recently updated record.
     deduped_by_title = {}
     for bill in active:
-        title = (bill.get("shortTitle") or "").strip().lower()
-        session_id = bill.get("introducedSessionId")
-        key = (title, session_id)
+        title_key = normalise_bill_title(bill)
+        if not title_key:
+            # Fall back to billId if title data is missing.
+            title_key = f"bill-{bill.get('billId', '')}"
         last_update = bill.get("lastUpdate", "")
-        if key not in deduped_by_title or last_update > deduped_by_title[key].get("lastUpdate", ""):
-            deduped_by_title[key] = bill
+        if title_key not in deduped_by_title or last_update > deduped_by_title[title_key].get("lastUpdate", ""):
+            deduped_by_title[title_key] = bill
 
     return list(deduped_by_title.values())
 
